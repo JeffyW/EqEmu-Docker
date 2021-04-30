@@ -1,0 +1,185 @@
+version: '3.8'
+
+# Persistent volumes
+volumes:
+  db_data:
+  server:
+  source:
+  build:
+  build_bots:
+    
+services:
+  eqemu-db:
+    container_name: eqemu-db
+    image: mariadb:latest
+    ports:
+      # Uncomment for debugging
+      - '3307:3306'
+    volumes:
+      - db_data:/var/lib/mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
+  eqemu-ucs:
+    container_name: eqemu-ucs
+    build: ./eqemu-server/
+    profiles: ["individual_services", "individual_services_loginserver"]
+    depends_on:
+      - eqemu-db
+    user: eqemu
+    ports:
+      # Chatserver / Mailserver
+      - '7778:7778'
+      - '7778:7778/udp'
+    working_dir: /home/eqemu/server
+    command: ./ucs
+    volumes:
+      - server:/home/eqemu/server
+      - build:/home/eqemu/server_build
+      - build_bots:/home/eqemu/server_build_bots
+      - .\logs:/home/eqemu/server/logs
+  eqemu-world:
+    container_name: eqemu-world
+    build: ./eqemu-server/
+    profiles: ["individual_services", "individual_services_loginserver"]
+    depends_on:
+      - eqemu-db
+    user: eqemu
+    ports:
+      # World server
+      - '9000-9001:9000-9001'
+      - '9000-9001:9000-9001/udp'
+    working_dir: /home/eqemu/server
+    command: ./world
+    volumes:
+      - server:/home/eqemu/server
+      - build:/home/eqemu/server_build
+      - build_bots:/home/eqemu/server_build_bots
+      - .\logs:/home/eqemu/server/logs
+  eqemu-zone:
+    container_name: eqemu-zone
+    build: ./eqemu-server/
+    profiles: ["individual_services", "individual_services_loginserver"]
+    depends_on:
+      - eqemu-db
+    ports:
+      # Zone ports, adjust as necessary
+      - '7000-7400:7000-7400'
+      - '7000-7400:7000-7400/udp'
+    working_dir: /home/eqemu/server
+    command: ./zone
+    # This needs updating so we can run multiple zones
+    volumes:
+      - server:/home/eqemu/server
+      - build:/home/eqemu/server_build
+      - build_bots:/home/eqemu/server_build_bots
+      - .\logs:/home/eqemu/server/logs
+  eqemu-queryserv:
+    container_name: eqemu-queryserv
+    build: ./eqemu-server/
+    # Should I do a profile with no queryserv?
+    profiles: ["individual_services", "individual_services_loginserver"]
+    depends_on:
+      - eqemu-db
+    user: eqemu
+    ports:
+      # ??
+      - '7779:7779'
+      - '7779:7779/udp'
+    working_dir: /home/eqemu/server
+    command: ./queryserv
+    volumes:
+      - server:/home/eqemu/server
+      - build:/home/eqemu/server_build
+      - build_bots:/home/eqemu/server_build_bots
+      - .\logs:/home/eqemu/server/logs
+  eqemu-loginserver:
+    container_name: eqemu-loginserver
+    build: ./eqemu-server/
+    profiles: ["individual_services_loginserver"]
+    depends_on:
+      - eqemu-db
+    user: eqemu
+    ports:
+      # Loginserver
+      # Titanium
+      - '5998:5998'
+      - '5998:5998/udp'
+      # SoD+
+      - '5999:5999'
+      - '5999:5999/udp'
+    working_dir: /home/eqemu/server
+    command: ./loginserver
+    volumes:
+      - server:/home/eqemu/server
+      - build:/home/eqemu/server_build
+      - build_bots:/home/eqemu/server_build_bots
+      - .\logs:/home/eqemu/server/logs
+  eqemu-peqeditor:
+    # NOT DONE
+    container_name: eqemu-peqeditor
+    build: ./eqemu-server/
+    profiles: ["individual_services_peqeditor"]
+    depends_on:
+      - eqemu-db
+    user: eqemu
+    ports:
+      - '8080:8080'
+    command: server/
+
+  eqemu-server:
+    container_name: eqemu-server
+    build: ./eqemu-server/
+    profiles: ["all_in_one"]
+    depends_on:
+      - eqemu-db
+    user: eqemu
+    ports:
+      # Loginserver
+      - '5998:5998'
+      - '5998:5998/udp'
+      - '5999:5999'
+      - '5999:5999/udp'
+      # Zone ports, adjust as necessary
+      - '7000-7400:7000-7400'
+      - '7000-7400:7000-7400/udp'
+      # Chatserver / Mailserver
+      - '7778-7779:7778-7779'
+      - '7778-7779:7778-7779/udp'
+      # Optional: port binding for localhost peqeditor
+      #- '8080:8080'
+      # World server
+      # Telnet
+      - '9000:9000'
+      - '9000:9000/udp'
+      # TCP
+      - '9001:9001'
+      - '9001:9001/udp'
+      #- '9080:9080'
+    working_dir: /home/eqemu/server
+    command: /bin/bash -c "./server_start_with_login.sh & /bin/bash"
+    #command: ./server_start_with_login.sh bash
+    stdin_open: true
+    tty: true
+    volumes:
+      - server:/home/eqemu/server
+      - source:/home/eqemu/server_source
+      - build:/home/eqemu/server_build
+      - build_bots:/home/eqemu/server_build_bots
+      #- .\logs:/home/eqemu/server/logs
+      #- .\export:/home/eqemu/server/export
+    environment:
+      # Change to use another db, if using eqemu-db container these much match
+      MYSQL_HOST: eqemu-db
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
+      # Temporary to test out script updates
+      EQEMU_SERVER_SKIP_UPDATE: 1
+      #EQEMU_SERVER_SKIP_MAPS_UPDATE: 1
